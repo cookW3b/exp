@@ -39,7 +39,7 @@ impl Explorer {
             cursor: Point { x: 1, y: 1 },
             list_length: 0,
             entries: Vec::new(),
-            path: fs::canonicalize(PathBuf::from("./test_dir")).unwrap(),
+            path: fs::canonicalize(PathBuf::from("./")).unwrap(),
             outputed_count: 0,
             scroll_y: 0,
         }
@@ -177,17 +177,10 @@ impl Explorer {
     }
 
     fn go_back(&mut self) {
-        let path = self.path.to_str().unwrap();
-        let mut slash_index = 0;
-
-        for i in 0..self.path.to_str().unwrap().len() {
-            if path.as_bytes()[i] as char == '/' {
-                slash_index = i;
-            }
+        if let Some(path) = self.path.parent() {
+            self.path = path.to_path_buf();
+            self.read_dir();
         }
-
-        self.path = fs::canonicalize(PathBuf::from(path[..slash_index].to_owned())).unwrap();
-        self.read_dir();
     }
 
     fn go_down(&mut self) {
