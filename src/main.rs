@@ -39,7 +39,7 @@ impl Explorer {
             cursor: Point { x: 1, y: 1 },
             list_length: 0,
             entries: Vec::new(),
-            path: PathBuf::from("./test_dir"),
+            path: fs::canonicalize(PathBuf::from("./test_dir")).unwrap(),
             outputed_count: 0,
             scroll_y: 0,
         }
@@ -47,7 +47,7 @@ impl Explorer {
 
     fn run(&mut self) {
         self.read_dir();
-        self.update_entry_list();
+        self.print_entries_list();
 
         let stdin = io::stdin();
         for c in stdin.keys() {
@@ -57,18 +57,12 @@ impl Explorer {
                 Key::Char('j')  => self.inc_cursor_y(),
                 Key::Char('g')  => self.go_up(),
                 Key::Char('d')  => self.go_down(),
-                Key::Char('\n') => {
-                    self.go_inside_dir();
-                    self.read_dir();
-                },
-                Key::Backspace  => {
-                    self.go_back();
-                    self.read_dir();
-                },
+                Key::Char('\n') => self.go_inside_dir(),
+                Key::Backspace  => self.go_back(),
                 _ => ()
             }
 
-            self.update_entry_list();
+            self.print_entries_list();
 
             self.stdout.flush().unwrap();
         }
@@ -80,6 +74,7 @@ impl Explorer {
         self.list_length = 0;
 
         self.scroll_y = 0;
+        self.cursor.y = 1;
 
         self.entries = Vec::new();
 
@@ -97,7 +92,7 @@ impl Explorer {
         self.entries.sort_by_key(|a| !a.is_dir);
     }
 
-    fn update_entry_list(&mut self) {
+    fn print_entries_list(&mut self) {
         let (_, size_y) = termion::terminal_size().unwrap();
 
         print!("{}{}\r",
@@ -106,7 +101,7 @@ impl Explorer {
 
         println!("{}{}{}\r",
                  color::Bg(color::Black),
-                 fs::canonicalize(PathBuf::from(&self.path)).unwrap().to_string_lossy(),
+                 fs::canonicalize(&self.path).unwrap().to_string_lossy(),
                  color::Bg(color::Reset),
         );
 
@@ -151,7 +146,9 @@ impl Explorer {
         if self.cursor.y < self.outputed_count {
             self.cursor.y += 1;
         } else {
-            if self.scroll_y < self.list_length as u16 % termion::terminal_size().unwrap().1 + 2  {
+            if  (self.cursor.y > termion::terminal_size().unwrap().1 - 4) &&
+                (self.scroll_y < self.list_length as u16 % termion::terminal_size().unwrap().1 + 2)
+            {
                 self.scroll_y += 1;
             }
         }
@@ -163,7 +160,7 @@ impl Explorer {
 
     fn go_up(&mut self) {
         self.cursor.y = 0;
-        self.update_entry_list();
+        self.print_entries_list();
         self.cursor.y = 1;
         println!(
             "{}",
@@ -174,7 +171,8 @@ impl Explorer {
     fn go_inside_dir(&mut self) {
         let curr_file = self.entries.get(self.cursor.y as usize - 1).unwrap();
         if curr_file.is_dir {
-            self.path = curr_file.path.clone();
+            self.path = fs::canonicalize(curr_file.path.clone()).unwrap();
+            self.read_dir();
         }
     }
 
@@ -188,11 +186,8 @@ impl Explorer {
             }
         }
 
-        self.path = PathBuf::from(path[..slash_index].to_owned())
-    }
-
-    fn get_cursor_filename(&self) {
-
+        self.path = fs::canonicalize(PathBuf::from(path[..slash_index].to_owned())).unwrap();
+        self.read_dir();
     }
 
     fn go_down(&mut self) {
