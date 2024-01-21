@@ -193,8 +193,10 @@ impl Explorer {
 
         for key in std::io::stdin().keys() {
             match key.unwrap() {
-                Key::Backspace => input_window.remove_last_char(),
+                Key::Backspace => input_window.remove_char(),
                 Key::Ctrl('c') => return (),
+                Key::Left => input_window.move_cursor_left(),
+                Key::Right => input_window.move_cursor_right(),
                 Key::Char('\n') => {
                     if input_window.content.len() > 0 {
                         break;
@@ -235,11 +237,11 @@ impl Explorer {
 }
 
 struct InputWindow {
-    input: Option<String>,
     size: (u16, u16),
     pos: (u16, u16),
     title: String,
     scroll_x: u16,
+    cursor_x: u16,
     content: String,
 }
 
@@ -248,30 +250,60 @@ impl InputWindow {
         let size = termion::terminal_size().unwrap();
 
         InputWindow {
-            input: None,
             size: (size.0 / 2, size.1 / 2),
             pos: (size.0 / 4, size.1 / 2),
             title: String::from("Input Window"),
             scroll_x: 0,
+            cursor_x: 0,
             content: String::new(),
         }
     }
 
     fn add_char(&mut self, new_char: char) {
-        self.content.push(new_char);
+        if self.cursor_x == self.content.chars().count() as u16 + self.pos.0 + 1 {
+            self.content.push(new_char);
+        } else {
+            let mut result = String::new();
+            for (i, c) in self.content.chars().enumerate() {
+                if i == (self.cursor_x - self.pos.0) as usize - 1 {
+                    result.push(new_char);
+                }
+                result.push(c);
+            }
+            self.content = result;
+        }
+
+        self.move_cursor_right();
     }
 
-    fn remove_last_char(&mut self) {
+    fn remove_char(&mut self) {
         if self.content.len() == 0 { return };
-        self.content = self.content[0..self.content.chars().count() - 1].to_string();
+        let mut result = String::new();
+
+        for (i, c) in self.content.chars().enumerate() {
+            if i + 1 != (self.cursor_x - self.pos.0) as usize - 1 {
+                result.push(c)
+            }
+        }
+
+        self.content = result;
+        self.move_cursor_left();
     }
 
     fn move_cursor_left(&mut self) {
-        // ...
+        if self.cursor_x > self.pos.0 + 1 {
+            self.cursor_x -= 1;
+        }
+
+        println!("{}", termion::cursor::Goto(self.cursor_x, self.pos.1 + 1))
     }
 
     fn move_cursor_right(&mut self) {
-        // ...
+        if self.cursor_x < self.content.chars().count() as u16 + self.pos.0 + 1 {
+            self.cursor_x += 1;
+        }
+
+        println!("{}", termion::cursor::Goto(self.cursor_x, self.pos.1 + 1))
     }
 
     fn render(&self) {
@@ -295,7 +327,7 @@ impl InputWindow {
 
         println!("{}", self.content);
         println!("{}", termion::cursor::Goto(
-                self.pos.0 + self.content.len() as u16 + 1,
+                self.cursor_x,
                 self.pos.1 + 1));
     }
 
@@ -312,6 +344,7 @@ impl InputWindow {
     }
 
     fn set_content(&mut self, content: String) {
-        self.content = content;
+        self.content = content.clone();
+        self.cursor_x = self.pos.0 + content.chars().count() as u16;
     }
 }
